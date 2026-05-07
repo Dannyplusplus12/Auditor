@@ -1,0 +1,30 @@
+name: build
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install
+        run: npm install
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+      - name: Package
+        run: zip -r a11y-ai-auditor.zip dist
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-ai-auditor
+          path: a11y-ai-auditor.zip

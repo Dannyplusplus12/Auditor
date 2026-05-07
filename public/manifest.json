@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "A11y-AI Auditor",
+  "version": "0.1.0",
+  "description": "Audit accessibility issues with axe-core and Gemini 1.5 Flash fixes.",
+  "action": {
+    "default_title": "A11y-AI Auditor",
+    "default_popup": "popup.html"
+  },
+  "options_page": "settings.html",
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": ["https://generativelanguage.googleapis.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
