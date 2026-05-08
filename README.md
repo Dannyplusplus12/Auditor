@@ -1,12 +1,12 @@
 # A11y-AI Auditor
 
-A Chrome Extension (Manifest V3) that audits accessibility issues with axe-core and generates instant fixes and optimal prompts using Gemini 1.5 Flash.
+A Chrome Extension (Manifest V3) that audits accessibility issues with axe-core and generates instant fixes and optimal prompts using Gemini 2.5 Flash.
 
 ## Features
 
 - Run axe-core on the active tab from the popup.
 - Extract violation snippets, selectors, and visual element sources.
-- Send violation data to a background service worker that calls Gemini 1.5 Flash.
+- Send violation data to a background service worker that calls Gemini 2.5 Flash.
 - Display fixes and copy-ready prompts in a clean popup UI.
 - Securely store your Gemini API key via chrome.storage.local.
 
@@ -22,7 +22,7 @@ A Chrome Extension (Manifest V3) that audits accessibility issues with axe-core 
 ```
 Popup UI (popup.ts) -> Background Service Worker (background.ts)
                       -> Content Script (content-script.ts) runs axe-core
-                      -> Gemini 1.5 Flash API
+                      -> Gemini 2.5 Flash API
 ```
 
 ## Local Setup
@@ -45,7 +45,7 @@ Popup UI (popup.ts) -> Background Service Worker (background.ts)
 1. Open the extension popup.
 2. Click **Analyze**.
 3. Review the fixes and copy prompts.
-4. Open **Settings** to add your Gemini API key.
+4. Paste your Gemini API key in the popup input.
 
 ## CI/CD
 

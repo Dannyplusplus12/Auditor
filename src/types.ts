@@ -41,4 +41,5 @@ export type PopupState = {
   isLoading: boolean;
   error?: string;
   response?: GeminiResponse;
+  apiKey?: string;
 };

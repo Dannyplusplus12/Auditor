@@ -1,4 +1,5 @@
 import type { PopupState, GeminiResponse } from "./types";
+import { getSettings, setSettings, watchSettings } from "./storage";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 
@@ -7,40 +8,45 @@ if (!app) {
 }
 
 const initialState: PopupState = {
-  isLoading: false
+  isLoading: false,
+  apiKey: ""
 };
 
-const renderLoading = () => {
+const renderLoading = (apiKey: string) => {
   app.innerHTML = `
     <div class="card stack">
       <div class="section-title">A11y-AI Auditor</div>
       <strong>Running accessibility audit...</strong>
       <div class="note">Analyzing the active tab with axe-core.</div>
+      <label class="stack">
+        <span class="section-title">Gemini API Key</span>
+        <input class="input" type="text" id="apiKey" value="${apiKey}" placeholder="Paste your key" />
+      </label>
     </div>
   `;
 };
 
-const renderError = (message: string) => {
+const renderError = (message: string, apiKey: string) => {
   app.innerHTML = `
     <div class="card stack">
       <div class="section-title">A11y-AI Auditor</div>
       <strong>We hit a snag</strong>
       <div class="note">${message}</div>
+      <label class="stack">
+        <span class="section-title">Gemini API Key</span>
+        <input class="input" type="text" id="apiKey" value="${apiKey}" placeholder="Paste your key" />
+      </label>
       <div class="row">
         <button class="button" id="retry">Retry</button>
-        <button class="button secondary" id="open-settings">Settings</button>
       </div>
     </div>
   `;
 
   const retry = document.querySelector<HTMLButtonElement>("#retry");
   retry?.addEventListener("click", () => startAudit());
-
-  const openSettings = document.querySelector<HTMLButtonElement>("#open-settings");
-  openSettings?.addEventListener("click", () => chrome.runtime.openOptionsPage());
 };
 
-const renderResults = (response: GeminiResponse) => {
+const renderResults = (response: GeminiResponse, apiKey: string) => {
   const cards = response.fixes
     .map(
       (fix) => `
@@ -78,7 +84,10 @@ const renderResults = (response: GeminiResponse) => {
           <strong>${response.fixes.length} fix${response.fixes.length === 1 ? "" : "es"}</strong>
           <div class="note">${response.url}</div>
         </div>
-        <button class="button secondary" id="open-settings">Settings</button>
+        <label class="stack" style="margin: 0;">
+          <span class="section-title">Gemini API Key</span>
+          <input class="input" type="text" id="apiKey" value="${apiKey}" placeholder="Paste your key" />
+        </label>
       </div>
       <div class="card-list">${cards || "<div>No violations detected 🎉</div>"}</div>
       <button class="button" id="analyze">Analyze Again</button>
@@ -99,20 +108,20 @@ const renderResults = (response: GeminiResponse) => {
   document
     .querySelector<HTMLButtonElement>("#analyze")
     ?.addEventListener("click", () => startAudit());
-  document
-    .querySelector<HTMLButtonElement>("#open-settings")
-    ?.addEventListener("click", () => chrome.runtime.openOptionsPage());
 };
 
-const renderIdle = () => {
+const renderIdle = (apiKey: string) => {
   app.innerHTML = `
     <div class="card stack">
       <div class="section-title">A11y-AI Auditor</div>
       <strong>Audit the active tab for accessibility issues.</strong>
-      <div class="note">Powered by axe-core + Gemini 1.5 Flash.</div>
+      <div class="note">Powered by axe-core + Gemini 2.5 Flash.</div>
+      <label class="stack">
+        <span class="section-title">Gemini API Key</span>
+        <input class="input" type="text" id="apiKey" value="${apiKey}" placeholder="Paste your key" />
+      </label>
       <div class="row">
         <button class="button" id="analyze">Analyze</button>
-        <button class="button secondary" id="open-settings">Settings</button>
       </div>
     </div>
   `;
@@ -120,33 +129,71 @@ const renderIdle = () => {
   document
     .querySelector<HTMLButtonElement>("#analyze")
     ?.addEventListener("click", () => startAudit());
-  document
-    .querySelector<HTMLButtonElement>("#open-settings")
-    ?.addEventListener("click", () => chrome.runtime.openOptionsPage());
 };
 
-const setState = (state: PopupState) => {
+const wireApiKeyInput = (state: PopupState) => {
+  const input = document.querySelector<HTMLInputElement>("#apiKey");
+  if (!input) {
+    return;
+  }
+
+  input.addEventListener("input", async () => {
+    const value = input.value.trim();
+    if (state.apiKey === value) {
+      return;
+    }
+    state.apiKey = value;
+    await setSettings({ apiKey: value });
+  });
+};
+
+let currentState: PopupState = { ...initialState };
+let unsubscribeSettings: (() => void) | undefined;
+
+const initialize = async () => {
+  const settings = await getSettings();
+  currentState = {
+    ...currentState,
+    apiKey: settings.apiKey ?? ""
+  };
+  renderState(currentState);
+  unsubscribeSettings?.();
+  unsubscribeSettings = watchSettings((settingsState) => {
+    currentState = {
+      ...currentState,
+      apiKey: settingsState.apiKey ?? ""
+    };
+    renderState(currentState);
+  });
+};
+
+const renderState = (state: PopupState) => {
+  const apiKey = state.apiKey ?? "";
   if (state.isLoading) {
-    renderLoading();
-    return;
+    renderLoading(apiKey);
+  } else if (state.error) {
+    renderError(state.error, apiKey);
+  } else if (state.response) {
+    renderResults(state.response, apiKey);
+  } else {
+    renderIdle(apiKey);
   }
 
-  if (state.error) {
-    renderError(state.error);
-    return;
-  }
+  wireApiKeyInput(state);
+};
 
-  if (state.response) {
-    renderResults(state.response);
-    return;
-  }
-
-  renderIdle();
+const updateState = (state: PopupState) => {
+  currentState = {
+    ...currentState,
+    ...state
+  };
+  renderState(currentState);
 };
 
 const startAudit = async () => {
-  setState({
-    isLoading: true
+  updateState({
+    isLoading: true,
+    error: undefined
   });
 
   try {
@@ -158,17 +205,17 @@ const startAudit = async () => {
       throw new Error(response?.error ?? "Unable to analyze the page.");
     }
 
-    setState({
+    updateState({
       isLoading: false,
       response: response.data as GeminiResponse
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    setState({
+    updateState({
       isLoading: false,
       error: message
     });
   }
 };
 
-setState(initialState);
+void initialize();

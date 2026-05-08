@@ -7,7 +7,6 @@
     "default_title": "A11y-AI Auditor",
     "default_popup": "popup.html"
   },
-  "options_page": "settings.html",
   "background": {
     "service_worker": "background.js",
     "type": "module"

@@ -2,7 +2,7 @@ import type { AxeAuditPayload, GeminiFix, GeminiResponse } from "./types";
 import { getSettings } from "./storage";
 
 const GEMINI_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 const extractImageSrc = (htmlSnippet: string) => htmlSnippet.match(/src=["']([^"']+)["']/i)?.[1];
 
@@ -109,10 +109,11 @@ const parseGeminiResponse = (text: string, payload: AxeAuditPayload): GeminiResp
 const runGemini = async (payload: AxeAuditPayload): Promise<GeminiResponse> => {
   const { apiKey, body } = await generateGeminiRequest(payload);
 
-  const response = await fetch(`${GEMINI_ENDPOINT}?key=${apiKey}`, {
+  const response = await fetch(GEMINI_ENDPOINT, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey
     },
     body: JSON.stringify(body)
   });
