@@ -48,6 +48,11 @@ export type SettingsState = {
   language: "vi" | "en";
 };
 
+export type StoredResults = {
+  url: string;
+  fixes: GeminiFix[];
+};
+
 export type PopupState = {
   isLoading: boolean;
   error?: string;

@@ -1,5 +1,5 @@
-import type { PopupState, GeminiResponse } from "./types";
-import { getSettings, setSettings, watchSettings } from "./storage";
+import type { PopupState, GeminiResponse, StoredResults } from "./types";
+import { clearResults, getResults, getSettings, setResults, setSettings, watchSettings } from "./storage";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 
@@ -14,6 +14,11 @@ const initialState: PopupState = {
   isSettingsOpen: false
 };
 
+let finishedCount = 0;
+
+const getCompletedCount = (fixes: GeminiResponse["fixes"]) =>
+  fixes.filter((fix) => fix.progress === "complete").length;
+
 const renderHeaderHtml = (
   apiKey: string,
   language: "vi" | "en",
@@ -24,11 +29,16 @@ const renderHeaderHtml = (
     ? `<strong class="header-count">${response.fixes.length} fix${response.fixes.length === 1 ? "" : "es"}</strong>`
     : "";
   const urlText = response ? `<div class="note">${response.url}</div>` : "";
+  const completed = response ? getCompletedCount(response.fixes) : 0;
+  const total = response ? response.fixes.length : 0;
+  const copyLabel = response ? `Copy All Prompts (${completed}/${total})` : "Copy All Prompts";
+  const copyDisabled = completed === 0 ? "disabled" : "";
   const actions = response
     ? `
       <div class="header-buttons">
-        <button class="button" id="analyze">Analyze Again</button>
-        <button class="button secondary" id="copy-all">Copy All Prompts</button>
+        <button class="button" id="analyze">Full Re-scan</button>
+        <button class="button secondary" id="copy-all" ${copyDisabled}>${copyLabel}</button>
+        <button class="button secondary" id="clear-results">Clear Results</button>
       </div>
     `
     : "";
@@ -109,8 +119,16 @@ const createViolationCard = (fix: GeminiResponse["fixes"][0]) => {
   refreshButton.type = "button";
   refreshButton.title = "Re-run";
   refreshButton.setAttribute("aria-label", "Re-run violation");
-  refreshButton.textContent = "↻";
+  refreshButton.innerHTML = `
+    <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M12 4a8 8 0 0 1 7.65 5.53l1.86-1.07v5.04h-5.04l1.85-1.07A6 6 0 1 0 18 12h2a8 8 0 0 1-8 8 8 8 0 0 1 0-16Z"
+      />
+    </svg>
+  `;
   refreshButton.dataset.violationId = fix.violationId;
+  refreshButton.dataset.loading = fix.progress === "pending" ? "true" : "false";
   badgeRow.append(refreshButton);
 
   const selectorBadge = document.createElement("span");
@@ -128,7 +146,7 @@ const createViolationCard = (fix: GeminiResponse["fixes"][0]) => {
   if (fix.progress === "pending") {
     const statusBadge = document.createElement("span");
     statusBadge.className = "badge status";
-    statusBadge.textContent = "loading";
+    statusBadge.textContent = "Analyzing...";
     badgeRow.append(statusBadge);
   }
 
@@ -234,30 +252,12 @@ const renderResults = (response: GeminiResponse, state: PopupState) => {
     response.fixes.forEach((fix) => list.append(createViolationCard(fix)));
   }
 
-  const analyzeButton = document.createElement("button");
-  analyzeButton.className = "button";
-  analyzeButton.id = "analyze";
-  analyzeButton.textContent = "Analyze Again";
-
-  card.append(header, list, analyzeButton); // No functional change needed
+  card.append(header, list);
   app.append(card);
 
-  document.querySelectorAll<HTMLButtonElement>("[data-copy]").forEach((button) => { // Keeping copy feedback logic
-    button.addEventListener("click", async () => { // Keeping copy feedback logic
-      const text = button.dataset.copy ?? ""; // Keeping copy feedback logic
-      if (!text) { // Keeping copy feedback logic
-        return; // Keeping copy feedback logic
-      }
-      await navigator.clipboard.writeText(text); // Keeping copy feedback logic
-      const previous = button.textContent; // Keeping copy feedback logic
-      button.textContent = "Copied!"; // Keeping copy feedback logic
-      button.classList.add("copy-feedback"); // Keeping copy feedback logic
-      setTimeout(() => { // Keeping copy feedback logic
-        button.textContent = previous ?? "Copy"; // Keeping copy feedback logic
-        button.classList.remove("copy-feedback"); // Keeping copy feedback logic
-      }, 1400); // Keeping copy feedback logic
-    }); // Keeping copy feedback logic
-  }); // Keeping copy feedback logic
+  finishedCount = getCompletedCount(response.fixes);
+
+  finishedCount = getCompletedCount(response.fixes);
 
   document
     .querySelector<HTMLButtonElement>("#analyze")
@@ -267,6 +267,7 @@ const renderResults = (response: GeminiResponse, state: PopupState) => {
     .querySelector<HTMLButtonElement>("#copy-all")
     ?.addEventListener("click", async () => {
       const prompts = response.fixes
+        .filter((fix) => fix.progress === "complete")
         .map((fix) => fix.optimalPrompt || fix.manualInstructions || "")
         .filter(Boolean)
         .join("\n\n");
@@ -285,6 +286,15 @@ const renderResults = (response: GeminiResponse, state: PopupState) => {
         button.textContent = previous ?? "Copy All Prompts";
         button.classList.remove("copy-feedback");
       }, 1400);
+    });
+
+  document
+    .querySelector<HTMLButtonElement>("#clear-results")
+    ?.addEventListener("click", async () => {
+      await clearResults();
+      updateState({
+        response: undefined
+      });
     });
 };
 
@@ -316,6 +326,8 @@ const wireRefreshButtons = () => {
         return;
       }
 
+      button.classList.add("is-loading");
+
       const updatedFixes = currentState.response.fixes.map((item) =>
         item.violationId === violationId
           ? {
@@ -336,10 +348,14 @@ const wireRefreshButtons = () => {
         }
       });
 
-      await chrome.runtime.sendMessage({
+      const response = await chrome.runtime.sendMessage({
         type: "RUN_SINGLE_VIOLATION",
         violationId
       });
+
+      if (!response?.success) {
+        button.classList.remove("is-loading");
+      }
     });
   });
 };
@@ -413,6 +429,16 @@ const initialize = async () => {
     apiKey: settings.apiKey ?? "",
     language: settings.language ?? "vi"
   };
+  const savedResults = (await getResults()) as StoredResults | undefined;
+  if (savedResults?.fixes?.length) {
+    currentState = {
+      ...currentState,
+      response: {
+        url: savedResults.url,
+        fixes: savedResults.fixes
+      }
+    };
+  }
   renderState(currentState);
   unsubscribeSettings?.();
   unsubscribeSettings = watchSettings((settingsState) => {
@@ -447,6 +473,12 @@ const updateState = (state: PopupState) => {
     ...state
   };
   renderState(currentState);
+  if (currentState.response) {
+    void setResults({
+      url: currentState.response.url,
+      fixes: currentState.response.fixes
+    });
+  }
 };
 
 const startAudit = async () => {
@@ -482,7 +514,7 @@ chrome.runtime.onMessage.addListener((message) => {
     return;
   }
 
-  const fix = message.data?.fix as GeminiResponse["fixes"][0] | undefined; // Keeping listener intact
+  const fix = message.data?.fix as GeminiResponse["fixes"][0] | undefined;
   if (!fix || !currentState.response) {
     return;
   }
@@ -497,6 +529,11 @@ chrome.runtime.onMessage.addListener((message) => {
       fixes: updatedFixes
     }
   });
+
+  const refreshButton = document.querySelector<HTMLButtonElement>(
+    `[data-violation-id="${fix.violationId}"]`
+  );
+  refreshButton?.classList.remove("is-loading");
 });
 
 void initialize();
