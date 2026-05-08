@@ -5,7 +5,8 @@ const SETTINGS_KEY = "a11y_ai_settings";
 export const getSettings = async (): Promise<SettingsState> => {
   const result = await chrome.storage.local.get(SETTINGS_KEY);
   return {
-    apiKey: result[SETTINGS_KEY]?.apiKey ?? ""
+    apiKey: result[SETTINGS_KEY]?.apiKey ?? "",
+    language: result[SETTINGS_KEY]?.language === "en" ? "en" : "vi"
   };
 };
 
@@ -16,7 +17,8 @@ export const watchSettings = (callback: (settings: SettingsState) => void): (() 
     }
 
     callback({
-      apiKey: changes[SETTINGS_KEY].newValue?.apiKey ?? ""
+      apiKey: changes[SETTINGS_KEY].newValue?.apiKey ?? "",
+      language: changes[SETTINGS_KEY].newValue?.language === "en" ? "en" : "vi"
     });
   };
 

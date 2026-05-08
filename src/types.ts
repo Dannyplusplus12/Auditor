@@ -2,6 +2,13 @@ export type AxeViolationNode = {
   html: string;
   target: string[];
   failureSummary?: string;
+  computedStyles?: {
+    color?: string;
+    backgroundColor?: string;
+    fontSize?: string;
+    fontWeight?: string;
+    lineHeight?: string;
+  };
 };
 
 export type AxeViolation = {
@@ -26,6 +33,9 @@ export type GeminiFix = {
   analysis: string;
   fixedCode: string;
   optimalPrompt: string;
+  progress?: "pending" | "complete" | "error";
+  manualInstructions?: string;
+  error?: string;
 };
 
 export type GeminiResponse = {
@@ -35,6 +45,7 @@ export type GeminiResponse = {
 
 export type SettingsState = {
   apiKey: string;
+  language: "vi" | "en";
 };
 
 export type PopupState = {
@@ -42,4 +53,6 @@ export type PopupState = {
   error?: string;
   response?: GeminiResponse;
   apiKey?: string;
+  language?: "vi" | "en";
+  isSettingsOpen?: boolean;
 };
